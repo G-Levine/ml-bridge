@@ -1,0 +1,12 @@
+[project]
+name = "ml-bridge-py"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "absl-py>=2.1.0",
+    "iree-base-compiler>=3.1.0",
+    "iree-base-runtime>=3.1.0",
+    "jax>=0.5.0",
+]

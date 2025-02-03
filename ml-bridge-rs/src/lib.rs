@@ -14,8 +14,75 @@ pub fn make_fn_from_json(input: TokenStream) -> TokenStream {
 
     let json_str = std::fs::read_to_string(&full_path).expect("Failed to read JSON file");
 
+    // Helper: Recursively convert a serde_json::Value into a token stream representing a Rust literal.
+    fn value_to_tokens(v: &Value) -> proc_macro2::TokenStream {
+        match v {
+            Value::Null => quote! { () },
+            Value::Bool(b) => quote! { #b },
+            Value::Number(num) => {
+                // Always produce a float literal.
+                let s = num.to_string();
+                // If there's no decimal point, add one.
+                let with_decimal = if s.contains('.') {
+                    s
+                } else {
+                    format!("{}.0", s)
+                };
+                let lit = syn::LitFloat::new(&with_decimal, proc_macro2::Span::call_site());
+                quote! { #lit }
+            }
+            Value::String(s) => {
+                let lit = syn::LitStr::new(s, proc_macro2::Span::call_site());
+                quote! { #lit }
+            }
+            Value::Array(arr) => {
+                let elems: Vec<_> = arr.iter().map(value_to_tokens).collect();
+                quote! { [ #( #elems ),* ] }
+            }
+            Value::Object(_) => {
+                panic!("Cannot convert object to literal")
+            }
+        }
+    }
+
+    fn value_to_tuple_tokens(v: &Value) -> proc_macro2::TokenStream {
+        if let Value::Array(items) = v {
+            let elems: Vec<_> = items.iter().map(value_to_tokens).collect();
+            quote! { ( #( #elems ),* ) }
+        } else {
+            value_to_tokens(v)
+        }
+    }
+
+    fn value_to_ref_tuple_tokens(v: &Value) -> proc_macro2::TokenStream {
+        if let Value::Array(items) = v {
+            // For each item in the top-level array, get its token stream and prefix it with &
+            let elems: Vec<_> = items
+                .iter()
+                .map(|item| {
+                    let tokens = value_to_tokens(item);
+                    quote! { & #tokens }
+                })
+                .collect();
+            quote! { ( #( #elems ),* ) }
+        } else {
+            value_to_tokens(v)
+        }
+    }
+
     // Parse the JSON.
     let json_value: Value = serde_json::from_str(&json_str).expect("Failed to parse JSON input");
+
+    let sample_input_tokens = value_to_ref_tuple_tokens(
+        json_value
+            .get("sample_input_flat")
+            .expect("Expected 'sample_input_flat' in JSON"),
+    );
+    let sample_output_tokens = value_to_tuple_tokens(
+        json_value
+            .get("sample_output_flat")
+            .expect("Expected 'sample_output_flat' in JSON"),
+    );
 
     // Helper: for each leaf, we now record a triple:
     // (param_ty, dims, base_ty)
@@ -221,6 +288,42 @@ pub fn make_fn_from_json(input: TokenStream) -> TokenStream {
             #( #output_buffer_code )*
 
             #output_tuple
+        }
+
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+            use eerie::runtime::api;
+            use eerie::runtime::hal;
+
+            #[test]
+            fn test_generated_fn() {
+                // Create an instance and session.
+                let instance = api::Instance::new(
+                    &api::InstanceOptions::new(&mut hal::DriverRegistry::new())
+                        .use_all_available_drivers(),
+                ).expect("Failed to create instance");
+                let device = instance
+                    .try_create_default_device("local-task")
+                    .expect("Failed to create device");
+                let session = api::Session::create_with_device(
+                    &instance,
+                    &api::SessionOptions::default(),
+                    &device
+                ).expect("Failed to create session");
+
+                // Build the sample input tuple from the JSON using embedded literals.
+                let sample_input = (#sample_input_tokens);
+
+                // Call the generated function.
+                let output = #fun_ident(&instance, &session, sample_input);
+
+                // The expected output as provided in the JSON.
+                let expected_output = (#sample_output_tokens);
+
+                // Assertions: perform any appropriate comparisons here.
+                assert_eq!(output, expected_output);
+            }
         }
     };
 

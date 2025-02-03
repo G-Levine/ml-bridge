@@ -1,12 +1,13 @@
 use base64::{engine::general_purpose, Engine as _};
-use eerie::runtime::api::Session;
-use serde::{Deserialize, Serialize};
-use std::fs;
-
 use eerie::runtime::api;
+use eerie::runtime::api::Session;
 use eerie::runtime::hal;
 use eerie::runtime::vm::*;
 use eerie::runtime::*;
+use serde::{Deserialize, Serialize};
+use std::fs;
+
+use ml_bridge_rs::make_fn_from_json;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExportData {
@@ -30,7 +31,7 @@ pub struct LeafInfo {
     pub dtype: String,
 }
 
-// fn leaf_info_to_type(leaf_info: &LeafInfo) -> Type {
+// fn leaf_info_to_type(leaf_info: &LeafInfo) -> String {
 //     // Map the dtype string (e.g. "float32") to a Rust numeric type.
 //     let rust_primitive = match leaf_info.dtype.as_str() {
 //         "float32" => "f32",
@@ -48,7 +49,7 @@ pub struct LeafInfo {
 //     }
 
 //     // Return the Rust type string
-//     Type::new(shape_str)
+//     shape_str
 // }
 
 pub struct RuntimeContext<'a, const IN_STORAGE_SIZE: usize, const OUT_STORAGE_SIZE: usize> {
@@ -106,10 +107,80 @@ fn invoke<
     }
 }
 
+make_fn_from_json!(
+    r#"
+    {
+      "name": "test_fn",
+      "input_format": {
+        "tree": [[0, 1], {}],
+        "leaves": [
+          { "shape": [3], "dtype": "float32" },
+          { "shape": [3], "dtype": "float32" }
+        ]
+      },
+      "output_format": {
+        "tree": 0,
+        "leaves": [
+          { "shape": [3], "dtype": "float32" }
+        ]
+      },
+      "sample_input_flat": [
+        [1.0, 2.0, 3.0],
+        [4.0, 5.0, 6.0]
+      ],
+      "sample_output_flat": [
+        [16.84, 25.909, 36.141]
+      ],
+      "compiled_module": "<BASE64 MODULE STRING HERE>"
+    }
+    "#
+);
+
+make_fn_from_json!(
+    r#"
+    {
+      "name": "test_fn_2d",
+      "input_format": {
+        "tree": [[0, 1], {}],
+        "leaves": [
+          { "shape": [2, 3], "dtype": "float32" }
+        ]
+      },
+      "output_format": {
+        "tree": 0,
+        "leaves": [
+          { "shape": [2, 3], "dtype": "float32" }
+        ]
+      },
+      "sample_input_flat": [
+        [
+          [1.0, 2.0, 3.0],
+          [4.0, 5.0, 6.0]
+        ]
+      ],
+      "sample_output_flat": [
+        [
+          [1.0, 2.0, 3.0],
+          [4.0, 5.0, 6.0]
+        ]
+      ],
+      "compiled_module": "<BASE64 MODULE STRING HERE>"
+    }
+    "#
+);
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let file_str = fs::read_to_string("../ml-bridge-py/export_data.json")?;
     let data: ExportData = serde_json::from_str(&file_str)?;
     // println!("{:#?}", data);
+
+    let mut out = [0.0; 3];
+    test_fn((&[1.0, 2.0, 3.0], &[4.0, 5.0, 6.0]), &mut out);
+    println!("{:?}", out);
+
+    let mut out = [[0.0; 3]; 2];
+    test_fn_2d(&[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], &mut out);
+    println!("{:?}", out);
 
     let vmfb = general_purpose::STANDARD
         .decode(data.compiled_module)

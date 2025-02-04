@@ -62,3 +62,9 @@ ml-bridge is a monorepo that exports JAX computations for use in Rust, leveragin
      load_exported_fn!("../ml-bridge-py/test_outputs/my_fn.json");
      ```
    - Once generated, you can invoke the function with input data to execute the compiled module.
+3. **Running the Demo Example:**
+   - There's an included demo in the `examples/` folder:
+     ```
+     cargo run --example demo
+     ```
+   - This demonstrates how to load your compiled modules and run them end-to-end using IREE.

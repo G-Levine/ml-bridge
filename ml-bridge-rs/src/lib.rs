@@ -1,15 +1,36 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use serde_json::Value;
-use syn::{parse_macro_input, LitStr};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, Ident, LitStr, Token,
+};
 
 mod helpers;
 use crate::helpers::{parse_leaf, value_to_ref_tuple_tokens, value_to_tuple_tokens};
 
+struct LoadExportedFnArgs {
+    name: Ident,
+    _comma: Token![,],
+    path: LitStr,
+}
+
+impl Parse for LoadExportedFnArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(LoadExportedFnArgs {
+            name: input.parse()?,
+            _comma: input.parse()?,
+            path: input.parse()?,
+        })
+    }
+}
+
 #[proc_macro]
 pub fn load_exported_fn(input: TokenStream) -> TokenStream {
-    // Get the JSON literal string.
-    let file_path = parse_macro_input!(input as LitStr).value();
+    // Parse macro input: an identifier for the module name and a string literal for the JSON file path.
+    let args = parse_macro_input!(input as LoadExportedFnArgs);
+    let module_name = args.name;
+    let file_path = args.path.value();
 
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let full_path = std::path::PathBuf::from(manifest_dir).join(&file_path);
@@ -131,13 +152,12 @@ pub fn load_exported_fn(input: TokenStream) -> TokenStream {
         .get("name")
         .and_then(|v| v.as_str())
         .expect("Expected 'name' to be a string");
-    let fun_ident = format_ident!("{}", fun_name_str);
 
     let jit_fun_str = format!("jit_{}.main", fun_name_str);
 
     // Generate the full function.
     let expanded = quote! {
-        mod #fun_ident {
+        mod #module_name {
             use base64::{engine::general_purpose, Engine as _};
             use eerie::runtime::vm::*;
 
@@ -152,7 +172,7 @@ pub fn load_exported_fn(input: TokenStream) -> TokenStream {
                 }
             }
 
-            pub fn setup_function(
+            pub fn register(
                 instance: &eerie::runtime::api::Instance,
                 session: &eerie::runtime::api::Session,
             ) {
@@ -163,7 +183,7 @@ pub fn load_exported_fn(input: TokenStream) -> TokenStream {
                 }.unwrap();
             }
 
-            pub fn #fun_ident(
+            pub fn call(
                 instance: &eerie::runtime::api::Instance,
                 session: &eerie::runtime::api::Session,
                 inputs: ( #( #input_types ),* )
@@ -222,13 +242,13 @@ pub fn load_exported_fn(input: TokenStream) -> TokenStream {
                     ).expect("Failed to create session");
 
                     // Setup the function.
-                    setup_function(&instance, &session);
+                    register(&instance, &session);
 
                     // Build the sample input tuple from the JSON using embedded literals.
                     let sample_input = (#sample_input_tokens);
 
                     // Call the generated function.
-                    let output = #fun_ident(&instance, &session, sample_input);
+                    let output = call(&instance, &session, sample_input);
 
                     // The expected output as provided in the JSON.
                     let expected_output = (#sample_output_tokens);

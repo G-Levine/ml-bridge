@@ -3,9 +3,10 @@ use eerie::runtime::hal;
 
 use ml_bridge_rs::load_exported_fn;
 
-load_exported_fn!("../ml-bridge-py/test_outputs/export_data.json");
-load_exported_fn!("../ml-bridge-py/test_outputs/fn_with_external.json");
-load_exported_fn!("../ml-bridge-py/test_outputs/fn_with_scalars.json");
+load_exported_fn!(my_fn, "../ml-bridge-py/test_outputs/my_fn.json");
+load_exported_fn!(fn_b, "../ml-bridge-py/test_outputs/another_fn.json");
+load_exported_fn!(fn_c, "../ml-bridge-py/test_outputs/fn_with_external.json");
+load_exported_fn!(fn_d, "../ml-bridge-py/test_outputs/fn_with_scalars.json");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let instance = api::Instance::new(
@@ -22,27 +23,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let inp1 = [1f32; 128];
     let inp2 = [[1f32; 128]; 128];
     let inp3 = [1f32; 128];
-    let inp4 = [[1f32; 128]; 128];
-    let inp5 = [1f32; 128];
 
-    test_fn::setup_function(&instance, &session);
+    // Benchmark the execution time
+    let num_iterations = 10;
+    my_fn::register(&instance, &session);
     {
         let start = std::time::Instant::now();
 
-        let out = test_fn::test_fn(&instance, &session, (&inp1, &inp2, &inp3, &inp4, &inp5));
-        let out = test_fn::test_fn(&instance, &session, (&inp1, &inp2, &inp3, &inp4, &inp5));
-        let out = test_fn::test_fn(&instance, &session, (&inp1, &inp2, &inp3, &inp4, &inp5));
-        let out = test_fn::test_fn(&instance, &session, (&inp1, &inp2, &inp3, &inp4, &inp5));
-        let out = test_fn::test_fn(&instance, &session, (&inp1, &inp2, &inp3, &inp4, &inp5));
-        let out = test_fn::test_fn(&instance, &session, (&inp1, &inp2, &inp3, &inp4, &inp5));
-        let out = test_fn::test_fn(&instance, &session, (&inp1, &inp2, &inp3, &inp4, &inp5));
-        let out = test_fn::test_fn(&instance, &session, (&inp1, &inp2, &inp3, &inp4, &inp5));
-        let out = test_fn::test_fn(&instance, &session, (&inp1, &inp2, &inp3, &inp4, &inp5));
-        let out = test_fn::test_fn(&instance, &session, (&inp1, &inp2, &inp3, &inp4, &inp5));
+        let mut out = my_fn::call(&instance, &session, (&inp1, &inp2, &inp3));
+        for _ in 1..num_iterations {
+            out = my_fn::call(&instance, &session, (&inp1, &inp2, &inp3));
+        }
 
         let duration = start.elapsed();
-        println!("Execution took: {:?}", duration / 10);
-        println!("out:\t{:?}", out);
+        println!("out:\t{:?}\n", out);
+        println!("Execution took: {:?}", duration / num_iterations);
     }
 
     Ok(())

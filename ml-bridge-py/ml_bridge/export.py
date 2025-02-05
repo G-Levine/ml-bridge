@@ -10,12 +10,19 @@ import numpy as np
 from jax import export, tree_util
 
 
-def export_and_compile(fn, positional_input, target_backends=["llvm-cpu"]):
+def export_and_compile(
+    fn,
+    positional_input,
+    target_backends=["llvm-cpu"],
+    extra_args=["--iree-llvmcpu-target-triple=aarch64-none-elf"],
+):
     # Create the jitted function and export it.
     exported = export.export(jax.jit(fn))(*positional_input)
     # compile the MLIR module using IREE
     compiled_flatbuffer = ireec.compile_str(
-        exported.mlir_module_serialized, target_backends=target_backends
+        exported.mlir_module_serialized,
+        target_backends=target_backends,
+        extra_args=extra_args,
     )
     return exported, compiled_flatbuffer
 
@@ -55,9 +62,15 @@ def dump_export_data(export_data, filename="export_data.json"):
 
 
 def compile_and_save(
-    fn, sample_input, filename="export_data.json", target_backends=["llvm-cpu"]
+    fn,
+    sample_input,
+    filename="export_data.json",
+    target_backends=["llvm-cpu"],
+    extra_args=["--iree-llvmcpu-target-triple=aarch64-none-elf"],
 ):
-    exported, compiled_flatbuffer = export_and_compile(fn, sample_input, target_backends)
+    exported, compiled_flatbuffer = export_and_compile(
+        fn, sample_input, target_backends, extra_args
+    )
     sample_output = fn(*sample_input)
     export_data = create_export_data(
         exported, compiled_flatbuffer, sample_input, sample_output

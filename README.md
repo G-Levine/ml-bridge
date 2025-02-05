@@ -15,7 +15,7 @@ ml-bridge is a monorepo that exports JAX computations for use in Rust, leveragin
 
    - If you are installing directly from the repository, you can use:
      ```
-     pip install git+https://github.com/yourname/ml-bridge.git#subdirectory=ml-bridge/ml-bridge-py
+     pip install git+https://github.com/G-Levine/ml-bridge.git#subdirectory=ml-bridge-py
      ```
    - If installing locally:
      ```
